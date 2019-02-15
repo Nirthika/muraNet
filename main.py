@@ -8,11 +8,11 @@ import time
 
 # Start time
 start = time.time()
-print('Start time: ', start, '\n')
+print('Start time: ', time.ctime(int(time.time())), '\n')
 
 # parameters
 lr = 0.0001
-batch_size = 16
+batch_size = 40
 n_epochs = 100
 GPU_ids = 0
 nclass = 2
@@ -57,5 +57,5 @@ mca = cnn.iterateCNN()
 
 # End time
 end = time.time()
-print('\n', 'End time: ', start)
+print('\n', 'End time: ', time.ctime(int(time.time())))
 print('Execution time: ', end - start, '\n')

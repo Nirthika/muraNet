@@ -70,7 +70,6 @@ class getData(data.Dataset):
         target = self.lbls[index]
 
         imagedata = default_loader(img_fn)
-        #print(imagedata.size)
         
         if self.transform is not None:
             imagedata = self.transform(imagedata)
