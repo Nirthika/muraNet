@@ -22,20 +22,20 @@ class cnnTrain(nn.Module):
         self.class_weights = torch.FloatTensor(weights).cuda()
         self.criterion = nn.CrossEntropyLoss(weight=self.class_weights).cuda(self.args.GPU_ids)
 
-        # self.optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=0.0005)
-        # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
-        #                                                             mode='min',
-        #                                                             patience=5,
-        #                                                             verbose=True)
-        self.optimizer = optim.SGD([{'params': net.features.parameters(), 'lr': args.lr},
-                                    {'params': net.classifier.parameters(), 'lr': args.lr*10}],
-                                   lr=args.lr,
-                                   momentum=0.9,
-                                   nesterov=True,
-                                   weight_decay=0.0005)
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer,
-                                                              milestones=[200, 300],
-                                                              gamma=0.1)
+        self.optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=0.0005)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+                                                                    mode='min',
+                                                                    patience=5,
+                                                                    verbose=True)
+        # self.optimizer = optim.SGD([{'params': net.features.parameters(), 'lr': args.lr},
+        #                             {'params': net.classifier.parameters(), 'lr': args.lr*10}],
+        #                            lr=args.lr,
+        #                            momentum=0.9,
+        #                            nesterov=True,
+        #                            weight_decay=0.0005)
+        # self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer,
+        #                                                       milestones=[200, 300],
+        #                                                       gamma=0.1)
 
         self.print_net()
 
@@ -156,14 +156,14 @@ class cnnTrain(nn.Module):
     def iterateCNN(self):
         tr_loss_arr = []
         for epoch in range(self.args.n_epochs):
-            self.scheduler.step()
+            # self.scheduler.step()
             train_loss, accTr, mcaTr, kappaTr = self.train(epoch)
             if epoch % 10 == 0:
                 valid_loss, accVa, mcaVa, kappaVa = self.valid(epoch)
-                # self.scheduler.step(valid_loss)
+                self.scheduler.step(valid_loss)
             else:
                 valid_loss, accVa, mcaVa, kappaVa = 0, 0, 0, 0
-                # self.scheduler.step(valid_loss)
+                self.scheduler.step(valid_loss)
             tr_loss_arr.append([train_loss, accTr, mcaTr, kappaTr, valid_loss, accVa, mcaVa, kappaVa])
 
             print('----------------------')
