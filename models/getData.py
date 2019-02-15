@@ -3,7 +3,7 @@ import numpy as np
 import torch.utils.data as data
 from PIL import Image
 
-def getLblInt(s):
+def getLabelInt(s):
     if '0\n' in s : lbl = 0
     elif '1\n' in s: lbl = 1
     else:
@@ -11,20 +11,19 @@ def getLblInt(s):
         raise ValueError("Unknown Label")
     return lbl
 
-def getData(fn, srcDir):    
+def getEachData(fn, srcDir):
     lblarr = []
     imgFnArr = []
     file = open(fn, 'r')
     for line in file:
         line = line.split(',')
-        # lbl = getLblInt(line[1])
-        lblarr.append(getLblInt(line[1]))
+        lblarr.append(getLabelInt(line[1]))
         imgFnArr.append(os.path.join(srcDir, line[0]))
     file.close()
     return imgFnArr, lblarr
 
 
-def printstatistics(lbl_arr):
+def printStatistics(lbl_arr):
     print("Total : ", len(lbl_arr))
     unique_lbls = set(lbl_arr)
     count = []
@@ -45,7 +44,7 @@ def printstatistics(lbl_arr):
        print(np.round(val/tot,3), end=',')
     print('\n-----------------\n')
     
-class DatasetFolder(data.Dataset):
+class getData(data.Dataset):
     def __init__(self, train=True, transform=None):    
         img_dir = './data/'
         if train:            
@@ -53,11 +52,11 @@ class DatasetFolder(data.Dataset):
         else:
             annot_fn = 'MURA-v1.1/valid.csv'
         annot_fn = os.path.join(img_dir, annot_fn)
-        self.fnArr, self.lbls = getData(annot_fn, img_dir)
+        self.fnArr, self.lbls = getEachData(annot_fn, img_dir)
 
         self.transform = transform
         self.train = train # training set or validation set
-        printstatistics(self.lbls)
+        printStatistics(self.lbls)
         
     def __getitem__(self, index):
         """
@@ -106,6 +105,6 @@ def default_loader(path):
         return pil_loader(path)
         
 '''
-df = DatasetFolder()
-df = DatasetFolder(train=False)
+df = getData()
+df = getData(train=False)
 '''

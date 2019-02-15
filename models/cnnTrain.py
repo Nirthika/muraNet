@@ -4,31 +4,30 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 import torchvision.transforms as transforms
-from models.DatasetFolder import DatasetFolder
+from models.getData import getData
 
-class CNN_Train(nn.Module):
+class cnnTrain(nn.Module):
     def __init__(self, net, args):
-        super(CNN_Train, self).__init__()
+        super(cnnTrain, self).__init__()
         self.args = args
         if torch.cuda.is_available():
             self.net = net.cuda(self.args.GPU_ids)
 
         self.trainloader, self.validloader, self.ntrain, self.nvalid = self.get_loaders()
 
+
         # Loss and Optimizer
-        weights = [1, 1]
+        weights = [0.404, 0.596]
         self.class_weights = torch.FloatTensor(weights).cuda()
         self.criterion = nn.CrossEntropyLoss(weight=self.class_weights).cuda(self.args.GPU_ids)
 
-        self.optimizer = optim.SGD([{'params': net.features.parameters(), 'lr': args.lr},
-                                    {'params': net.classifier.parameters(), 'lr': args.lr*10}],
-                                   lr=args.lr,
-                                   momentum=0.9,
-                                   nesterov=True,
-                                   weight_decay=0.0005)
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer,
-                                                              milestones=[200, 300],
-                                                              gamma=0.1)
+        self.optimizer = torch.optim.Adam(net.parameters(), lr=0.0001)
+
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+                                                                    mode='min',
+                                                                    patience=1,
+                                                                    verbose=True)
+
         self.print_net()
 
 
@@ -105,10 +104,6 @@ class CNN_Train(nn.Module):
         pytorch_total_params = float(pytorch_total_params)/10**6
         print('Total parameters requires_grad %.3f M'%(pytorch_total_params))
 
-        # pytorch_total_params = sum([param.nelement() for param in self.net.parameters()])
-        # print('total parameters %d'%(pytorch_total_params))
-        # pytorch_total_params = float(pytorch_total_params)/10**6
-        # print('total parameters %.3f M'%(pytorch_total_params))
         print('----------------------------')
 
     def get_loaders(self):
@@ -117,19 +112,19 @@ class CNN_Train(nn.Module):
 
         transform_train = transforms.Compose([
             transforms.Resize(imsize),
-            # transforms.RandomHorizontalFlip(),
+            transforms.RandomHorizontalFlip(),
             # transforms.RandomVerticalFlip(),
             # transforms.ColorJitter(0.05, 0.05, 0.05, 0.05),
             transforms.RandomRotation(30),
             # transforms.RandomAffine([-10, 10], translate=[0.05, 0.05], scale=[0.7, 1.3]),
-            transforms.RandomResizedCrop(32),
+            transforms.CenterCrop(32),
             transforms.ToTensor(),
             normalize
         ])
 
         transform_valid = transforms.Compose([
             transforms.Resize(imsize),
-            transforms.RandomResizedCrop(32),
+            transforms.CenterCrop(32),
             transforms.ToTensor(),
             normalize
         ])
@@ -137,8 +132,8 @@ class CNN_Train(nn.Module):
 
         # Dataset
         print('\nPreparing data----->')
-        trainset = DatasetFolder(train=True, transform=transform_train)
-        validset = DatasetFolder(train=False, transform=transform_valid)
+        trainset = getData(train=True, transform=transform_train)
+        validset = getData(train=False, transform=transform_valid)
 
 
         trainloader = torch.utils.data.DataLoader(trainset,
@@ -152,14 +147,17 @@ class CNN_Train(nn.Module):
         return trainloader, validloader, len(trainset), len(validset)
 
 
-    def iterate_CNN(self):
+    def iterateCNN(self):
         tr_loss_arr = []
         for epoch in range(self.args.n_epochs):
-            self.scheduler.step()
+            # self.scheduler.step()
             train_loss, accTr, mcaTr = self.train(epoch)
             if epoch%10==0:
                 valid_loss, accVa, mcaVa = self.valid(epoch)
-            else: valid_loss, accVa, mcaVa = 0, 0, 0
+                self.scheduler.step(valid_loss)
+            else:
+                valid_loss, accVa, mcaVa = 0, 0, 0
+                self.scheduler.step(valid_loss)
             tr_loss_arr.append([train_loss, accTr, mcaTr, valid_loss, accVa, mcaVa])
 
             print('----------------------')

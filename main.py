@@ -1,8 +1,8 @@
 import argparse
 import sys
 sys.path.append('./models/')
-from models.FineTune import FineTuneModel
-from models.CNN_Train import CNN_Train
+from models.fineTune import fineTuneModel
+from models.cnnTrain import cnnTrain
 import torchvision
 import time
 
@@ -12,8 +12,8 @@ print('Start time: ', start, '\n')
 
 # parameters
 lr = 0.0001
-batch_size = 8
-n_epochs = 5
+batch_size = 16
+n_epochs = 100
 GPU_ids = 0
 nclass = 2
 modelSaveFn = 'myModel'
@@ -46,14 +46,14 @@ else:
 #     # print("\nOriginal Model => \n", name, "-------->", param)
 #     print("\nOriginal Model => \n", name)
 #
-net = FineTuneModel(original_model, model_name)
+net = fineTuneModel(original_model, model_name)
 # for name, param in net.named_children():
 #     # print("\nFine-Tuned Model => \n", name, "-------->", param)
 #     print("\nFine-Tuned Model => \n", name)
 
 
-cnn = CNN_Train(net, args)
-mca = cnn.iterate_CNN()
+cnn = cnnTrain(net, args)
+mca = cnn.iterateCNN()
 
 # End time
 end = time.time()
