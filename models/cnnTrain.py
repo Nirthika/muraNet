@@ -7,7 +7,6 @@ import torchvision.transforms as transforms
 from models.getData import getData
 from sklearn.metrics import cohen_kappa_score
 
-
 class cnnTrain(nn.Module):
     def __init__(self, net, args):
         super(cnnTrain, self).__init__()
@@ -22,20 +21,21 @@ class cnnTrain(nn.Module):
         self.class_weights = torch.FloatTensor(weights).cuda()
         self.criterion = nn.CrossEntropyLoss(weight=self.class_weights).cuda(self.args.GPU_ids)
 
-        self.optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=0.0005)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
-                                                                    mode='min',
-                                                                    patience=5,
-                                                                    verbose=True)
-        # self.optimizer = optim.SGD([{'params': net.features.parameters(), 'lr': args.lr},
-        #                             {'params': net.classifier.parameters(), 'lr': args.lr*10}],
-        #                            lr=args.lr,
-        #                            momentum=0.9,
-        #                            nesterov=True,
-        #                            weight_decay=0.0005)
-        # self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer,
-        #                                                       milestones=[200, 300],
-        #                                                       gamma=0.1)
+        # self.optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=0.005)
+        # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
+        #                                                             mode='min',
+        #                                                             patience=5,
+        #                                                             verbose=True)
+
+        self.optimizer = optim.SGD([{'params': net.features.parameters(), 'lr': args.lr},
+                                    {'params': net.classifier.parameters(), 'lr': args.lr*10}],
+                                   lr=args.lr,
+                                   momentum=args.momentum,
+                                   nesterov=args.nesterov,
+                                   weight_decay=args.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer,
+                                                              milestones=args.milestones,
+                                                              gamma=args.gamma)
 
         self.print_net()
 
@@ -126,14 +126,14 @@ class cnnTrain(nn.Module):
             # transforms.ColorJitter(0.05, 0.05, 0.05, 0.05),
             transforms.RandomRotation(30),
             # transforms.RandomAffine([-10, 10], translate=[0.05, 0.05], scale=[0.7, 1.3]),
-            transforms.CenterCrop(32),
+            transforms.RandomCrop(224),
             transforms.ToTensor(),
             normalize
         ])
 
         transform_valid = transforms.Compose([
             transforms.Resize(imsize),
-            transforms.CenterCrop(32),
+            transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize
         ])
@@ -156,26 +156,30 @@ class cnnTrain(nn.Module):
     def iterateCNN(self):
         tr_loss_arr = []
         for epoch in range(self.args.n_epochs):
-            # self.scheduler.step()
+            self.scheduler.step()
             train_loss, accTr, mcaTr, kappaTr = self.train(epoch)
-            if epoch % 10 == 0:
-                valid_loss, accVa, mcaVa, kappaVa = self.valid(epoch)
-                self.scheduler.step(valid_loss)
-            else:
-                valid_loss, accVa, mcaVa, kappaVa = 0, 0, 0, 0
-                self.scheduler.step(valid_loss)
+            valid_loss, accVa, mcaVa, kappaVa = self.valid(epoch)
+
             tr_loss_arr.append([train_loss, accTr, mcaTr, kappaTr, valid_loss, accVa, mcaVa, kappaVa])
 
             print('----------------------')
-            print('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tKappaTr\t\tVaLoss\t\tVaAcc\t\tVaMCA\t\tKappaVa');
+            print('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tKappaTr\t\tVaLoss\t\tVaAcc\t\tVaMCA\t\tKappaVa')
             for i in range(len(tr_loss_arr)):
-                print('%d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t %.3f' %
+                print('%1d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t %.3f' %
                       (i, tr_loss_arr[i][0], tr_loss_arr[i][1], tr_loss_arr[i][2], tr_loss_arr[i][3],
                        tr_loss_arr[i][4], tr_loss_arr[i][5], tr_loss_arr[i][6], tr_loss_arr[i][7]))
-        mca = tr_loss_arr[-1][-1]
+
+        f = open("./results/lastResults.txt", "w+")
+        f.write('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tKappaTr\t\tVaLoss\t\tVaAcc\t\tVaMCA\t\tKappaVa\n')
+        for i in range(len(tr_loss_arr)):
+            f.write('%1d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t %.3f \n' %
+                      (i, tr_loss_arr[i][0], tr_loss_arr[i][1], tr_loss_arr[i][2], tr_loss_arr[i][3],
+                       tr_loss_arr[i][4], tr_loss_arr[i][5], tr_loss_arr[i][6], tr_loss_arr[i][7]))
+        f.close()
 
         torch.save(self.net, self.args.modelSaveFn)
-        return mca
+        max_valid_kappa = max([_[7] for _ in tr_loss_arr])
+        return max_valid_kappa
 
     def getMCA(self, correct_lbls, predicted_lbls):
         mca = 0
