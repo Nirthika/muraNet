@@ -12,16 +12,16 @@ start = time.time()
 print('Start time: ', time.ctime(int(time.time())), '\n')
 
 # parameters
-lr = 0.001
-batch_size = 32
+lr = 0.0001
+batch_size = 8
 n_epochs = 150
-GPU_ids = 1
+GPU_ids = 0
 nclass = 2
 momentum = 0.9
 nesterov = True
-weight_decay = 0.005
-milestones = [25, 50, 75,100]
-gamma = 0.005
+weight_decay = 0.0005
+milestones = [50, 75, 120]
+gamma = 0.1
 modelSaveFn = 'myModel'
 
 parser = argparse.ArgumentParser(description='MyFirstCNNTry')
@@ -39,16 +39,18 @@ parser.add_argument('--modelSaveFn', default=modelSaveFn)
 args = parser.parse_args()
 
 
-model_name = 'resnet50'
+model_name = 'densenet169'
 args.model_name = model_name
 if model_name == 'resnet152':
     original_model = torchvision.models.resnet152(pretrained=True)
 elif model_name == 'resnet50':
     original_model = torchvision.models.resnet50(pretrained=True)
+elif model_name == 'densenet121':
+    original_model = torchvision.models.densenet121(pretrained=True)
+elif model_name == 'densenet161':
+    original_model = torchvision.models.densenet161(pretrained=True)
 elif model_name == 'densenet169':
     original_model = torchvision.models.densenet169(pretrained=True)
-elif model_name == 'densenet201':
-    original_model = torchvision.models.densenet201(pretrained=True)
 else:
     original_model = ""
     print("Invalid model name, exiting...")

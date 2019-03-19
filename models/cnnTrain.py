@@ -6,6 +6,7 @@ from torch.autograd import Variable
 import torchvision.transforms as transforms
 from models.getData import getData
 from sklearn.metrics import cohen_kappa_score
+import matplotlib.pyplot as plt
 
 class cnnTrain(nn.Module):
     def __init__(self, net, args):
@@ -179,6 +180,29 @@ class cnnTrain(nn.Module):
 
         torch.save(self.net, self.args.modelSaveFn)
         max_valid_kappa = max([_[7] for _ in tr_loss_arr])
+
+        # Plot Epoch Vs TrLoss
+        ep = [i for i in range(self.args.n_epochs)]
+        tl = [i[0] for i in tr_loss_arr]
+        plt.figure(0)
+        plt.plot(ep, tl)
+        plt.savefig('EpochVsTrLoss.png')
+
+        # Plot Epoch Vs VaLoss
+        vl = [i[4] for i in tr_loss_arr]
+        plt.figure(1)
+        plt.plot(ep, vl)
+        plt.savefig('EpochVsVaLoss.png')
+
+        # Plot Epoch Vs KappaTr and KappaVa
+        tk = [i[3] for i in tr_loss_arr]
+        vk = [i[7] for i in tr_loss_arr]
+        plt.figure(2)
+        plt.plot(ep, tk)
+        plt.plot(ep, vk)
+        plt.legend(['KappaTr', 'KappaVa'], loc='upper left')
+        plt.savefig('EpochVsKappa.png')
+
         return max_valid_kappa
 
     def getMCA(self, correct_lbls, predicted_lbls):
