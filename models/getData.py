@@ -13,17 +13,18 @@ def getLabelInt(s):
 
 def getEachData(fn, srcDir):
     lblarr = []
+    classArr = []
     imgFnArr = []
     file = open(fn, 'r')
     for line in file:
         line = line.split(',')
-        lblarr.append(getLabelInt(line[1]))
         imgFnArr.append(os.path.join(srcDir, line[0]))
+        lblarr.append(getLabelInt(line[2]))
+        classArr.append(line[1])
     file.close()
-    return imgFnArr, lblarr
+    return imgFnArr, lblarr, classArr
 
-
-def printStatistics(lbl_arr):
+def printStatistics(lbl_arr, args):
     print("Total : ", len(lbl_arr))
     unique_lbls = set(lbl_arr)
     count = []
@@ -41,22 +42,23 @@ def printStatistics(lbl_arr):
     tot = sum(weights)    
     print("Weights :")
     for val in weights:
-       print(np.round(val/tot,3), end=',')
+        print(np.round(val/tot, 3), end=',')
+        args.weights.append(np.round(val/tot, 3))
     print('\n-----------------\n')
     
 class getData(data.Dataset):
-    def __init__(self, train=True, transform=None):    
+    def __init__(self, args, train=True, transform=None):
         img_dir = './data/'
         if train:            
-            annot_fn = 'MURA-v1.1/train.csv'
+            annot_fn = 'MURA-v1.1/train_ILC.csv'
         else:
-            annot_fn = 'MURA-v1.1/valid.csv'
+            annot_fn = 'MURA-v1.1/valid_ILC.csv'
         annot_fn = os.path.join(img_dir, annot_fn)
-        self.fnArr, self.lbls = getEachData(annot_fn, img_dir)
+        self.fnArr, self.lbls, self.classArr = getEachData(annot_fn, img_dir)
 
         self.transform = transform
         self.train = train # training set or validation set
-        printStatistics(self.lbls)
+        printStatistics(self.lbls, args)
         
     def __getitem__(self, index):
         """
@@ -68,13 +70,14 @@ class getData(data.Dataset):
         
         img_fn = self.fnArr[index]
         target = self.lbls[index]
+        class_type = self.classArr[index]
 
         imagedata = default_loader(img_fn)
         
         if self.transform is not None:
             imagedata = self.transform(imagedata)
 
-        return imagedata, target          
+        return imagedata, target, class_type
             
             
     def __len__(self):

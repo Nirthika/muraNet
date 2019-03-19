@@ -1,0 +1,23 @@
+Training Kappa ----->		
+Class		Kappa	
+SHOULDER:	0.751	
+HUMERUS:	0.839	
+FINGER:		0.699	
+ELBOW:		0.799	
+WRIST:		0.787	
+FOREARM:	0.751	
+HAND:		0.675	
+-----------------------	
+Max_train_Overall_kappa:  0.762
+
+Validating Kappa ----->		
+Class		Kappa	
+SHOULDER:	0.553	
+HUMERUS:	0.737	
+FINGER:		0.578	
+ELBOW:		0.772	
+WRIST:		0.704	
+FOREARM:	0.721	
+HAND:		0.573	
+-----------------------		
+Max_valid_Overall_kappa:  0.6674466560968266

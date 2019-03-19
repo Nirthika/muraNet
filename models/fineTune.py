@@ -17,14 +17,12 @@ class fineTuneModel(nn.Module):
             num_ftrs = original_model.fc.in_features
             self.classifier = nn.Sequential(nn.Linear(num_ftrs, args.nclass), nn.Softmax())
             self.modelName = 'resnet'
-        else :
+        else:
             raise("Finetuning not supported on this architecture yet")
 
     def forward(self, x):
-        f = self.features(x)
-        # print(f.size(0), f.size(1), f.size(2))
-        # f = f.view(f.size(0), -1)
-        f = F.relu(f, inplace=True)
-        f = F.avg_pool2d(f, kernel_size=7, stride=1).view(f.size(0), -1)
-        y = self.classifier(f)
-        return y
+        features = self.features(x)
+        out = F.relu(features, inplace=True)
+        out = F.avg_pool2d(out, kernel_size=7, stride=1).view(features.size(0), -1)
+        out = self.classifier(out)
+        return out

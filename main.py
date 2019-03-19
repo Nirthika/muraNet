@@ -13,15 +13,16 @@ print('Start time: ', time.ctime(int(time.time())), '\n')
 
 # parameters
 lr = 0.0001
-batch_size = 8
+batch_size = 32
 n_epochs = 150
-GPU_ids = 0
+GPU_ids = 1
 nclass = 2
 momentum = 0.9
 nesterov = True
-weight_decay = 0.0005
-milestones = [50, 75, 120]
+weight_decay = 0.005
+milestones = [50, 90]
 gamma = 0.1
+weights = []
 modelSaveFn = 'myModel'
 
 parser = argparse.ArgumentParser(description='MyFirstCNNTry')
@@ -35,9 +36,9 @@ parser.add_argument('--nesterov', default=nesterov)
 parser.add_argument('--weight_decay', default=weight_decay)
 parser.add_argument('--milestones', default=milestones)
 parser.add_argument('--gamma', default=gamma)
+parser.add_argument('--weights', default=weights)
 parser.add_argument('--modelSaveFn', default=modelSaveFn)
 args = parser.parse_args()
-
 
 model_name = 'densenet169'
 args.model_name = model_name
@@ -73,7 +74,7 @@ f.write('Batch Size: %3d\n' % batch_size)
 f.write('Epochs: %3d\n' % n_epochs)
 f.write('Classes: %2d\n' % nclass)
 f.write('momentum: %.3f\n' % momentum)
-f.write('nesterov: %s\n' % True)
+f.write('nesterov: %s\n' % nesterov)
 f.write('weight_decay: %.6f\n' % weight_decay)
 f.write('milestones: [ ')
 for num in milestones:
@@ -106,7 +107,7 @@ print('Batch Size: ', batch_size)
 print('Epochs: ', n_epochs)
 print('Classes: ', nclass)
 print('momentum: ', momentum)
-print('nesterov: ', True)
+print('nesterov: ', nesterov)
 print('weight_decay: ', weight_decay)
 print('milestones: ', milestones)
 print('gamma: ', gamma)

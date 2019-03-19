@@ -18,9 +18,9 @@ class cnnTrain(nn.Module):
         self.trainloader, self.validloader, self.ntrain, self.nvalid = self.get_loaders()
 
         # Loss and Optimizer
-        weights = [0.404, 0.596]
-        self.class_weights = torch.FloatTensor(weights).cuda()
-        self.criterion = nn.CrossEntropyLoss(weight=self.class_weights).cuda(self.args.GPU_ids)
+        tr_weight = [args.weights[0], args.weights[1]]
+        self.class_weights = torch.FloatTensor(tr_weight).cuda()
+        self.criterion = nn.CrossEntropyLoss(weight=self.class_weights, size_average=False).cuda(self.args.GPU_ids)
 
         # self.optimizer = torch.optim.Adam(net.parameters(), lr=args.lr, weight_decay=0.005)
         # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,
@@ -29,7 +29,7 @@ class cnnTrain(nn.Module):
         #                                                             verbose=True)
 
         self.optimizer = optim.SGD([{'params': net.features.parameters(), 'lr': args.lr},
-                                    {'params': net.classifier.parameters(), 'lr': args.lr*10}],
+                                    {'params': net.classifier.parameters(), 'lr': args.lr * 10}],
                                    lr=args.lr,
                                    momentum=args.momentum,
                                    nesterov=args.nesterov,
@@ -45,10 +45,11 @@ class cnnTrain(nn.Module):
         print('\nEpoch: %d' % epoch)
         self.net.train()
         train_loss = 0
-        correct = []
+        classArr = []
+        target = []
         predicted = []
         print('Training----->')
-        for batch_idx, (inputs, targets) in enumerate(self.trainloader):
+        for batch_idx, (inputs, targets, classes) in enumerate(self.trainloader):
             # transfer the inputs to the GPU, and set them variables
             inputs, targets = inputs.cuda(self.args.GPU_ids), targets.cuda(self.args.GPU_ids)
             inputs, targets = Variable(inputs), Variable(targets)
@@ -64,27 +65,30 @@ class cnnTrain(nn.Module):
 
             train_loss += loss.item()
             _, pred = torch.max(outputs.data, 1)
-            correct.extend(targets.cpu().numpy())
+            target.extend(targets.cpu().numpy())
             predicted.extend(pred.cpu().numpy())
+            for i in range(len(classes)):
+                classArr.append(classes[i])
 
-            # print statistics
             if (batch_idx + 1) % 100 == 0:
-                print('Epoch [%d/%d], Iter [%d/%d] Loss: %.4f'
-                      % (
-                      epoch + 1, self.args.n_epochs, batch_idx + 1, self.ntrain // self.args.batch_size, loss.item()))
+                print('Epoch [%d/%d], Iter [%d/%d] Loss: %.4f' % (
+                    epoch + 1, self.args.n_epochs, batch_idx + 1, self.ntrain // self.args.batch_size, train_loss))
 
-        acc, mca = self.getMCA(correct, predicted)
-        kappa = cohen_kappa_score(correct, predicted)
-        return train_loss, acc, mca, kappa
+        acc, mca = self.getMCA(target, predicted)
+        # kappa_p, kappa_n = self.getBinaryKappa(target, predicted)
+        O_kappa = cohen_kappa_score(target, predicted)
+        return train_loss, acc, mca, O_kappa, target, predicted, classArr
 
     def valid(self, epoch):
         self.net.eval()
         valid_loss = 0
-        correct = []
+        classArr = []
+        target = []
         predicted = []
         print('Validating----->')
-        for batch_idx, (inputs, targets) in enumerate(self.validloader):
+        for batch_idx, (inputs, targets, classes) in enumerate(self.validloader):
             inputs, targets = inputs.cuda(self.args.GPU_ids), targets.cuda(self.args.GPU_ids)
+
             with torch.no_grad():
                 inputs, targets = Variable(inputs), Variable(targets)
                 outputs = self.net(inputs)
@@ -92,18 +96,20 @@ class cnnTrain(nn.Module):
 
             valid_loss += loss.item()
             _, pred = torch.max(outputs.data, 1)
-            correct.extend(targets.cpu().numpy())
+            target.extend(targets.cpu().numpy())
             predicted.extend(pred.cpu().numpy())
+            for i in range(len(classes)):
+                classArr.append(classes[i])
 
             if (batch_idx + 1) % 100 == 0:
                 print('Completed: [%d/%d]' % (batch_idx + 1, self.nvalid // self.args.batch_size))
 
-        acc, mca = self.getMCA(correct, predicted)
-        kappa = cohen_kappa_score(correct, predicted)
-        return valid_loss, acc, mca, kappa
+        acc, mca = self.getMCA(target, predicted)
+        # kappa_p, kappa_n = self.getBinaryKappa(target, predicted)
+        O_kappa = cohen_kappa_score(target, predicted)
+        return valid_loss, acc, mca, O_kappa, target, predicted, classArr
 
     def print_net(self):
-        # print('----------------------------')
         # print(self.net)
         params = list(self.net.parameters())
         # for p in params:
@@ -113,7 +119,6 @@ class cnnTrain(nn.Module):
         print('Total parameters %d' % (pytorch_total_params))
         pytorch_total_params = float(pytorch_total_params) / 10 ** 6
         print('Total parameters requires_grad %.3f M' % (pytorch_total_params))
-
         print('----------------------------')
 
     def get_loaders(self):
@@ -141,8 +146,8 @@ class cnnTrain(nn.Module):
 
         # Dataset
         print('\nPreparing data----->')
-        trainset = getData(train=True, transform=transform_train)
-        validset = getData(train=False, transform=transform_valid)
+        trainset = getData(self.args, train=True, transform=transform_train)
+        validset = getData(self.args, train=False, transform=transform_valid)
 
         trainloader = torch.utils.data.DataLoader(trainset,
                                                   batch_size=self.args.batch_size,
@@ -155,51 +160,72 @@ class cnnTrain(nn.Module):
         return trainloader, validloader, len(trainset), len(validset)
 
     def iterateCNN(self):
-        tr_loss_arr = []
+        outputs = []
         for epoch in range(self.args.n_epochs):
             self.scheduler.step()
-            train_loss, accTr, mcaTr, kappaTr = self.train(epoch)
-            valid_loss, accVa, mcaVa, kappaVa = self.valid(epoch)
+            tr_loss, tr_acc, tr_mca, tr_kappa_o, tr_target, tr_pred, tr_cla = self.train(epoch)
+            va_loss, va_acc, va_mca, va_kappa_o, va_target, va_pred, va_cla = self.valid(epoch)
 
-            tr_loss_arr.append([train_loss, accTr, mcaTr, kappaTr, valid_loss, accVa, mcaVa, kappaVa])
+            outputs.append(
+                [tr_loss, tr_acc, tr_mca, tr_kappa_o, va_loss, va_acc, va_mca, va_kappa_o])
 
             print('----------------------')
-            print('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tKappaTr\t\tVaLoss\t\tVaAcc\t\tVaMCA\t\tKappaVa')
-            for i in range(len(tr_loss_arr)):
-                print('%1d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t %.3f' %
-                      (i, tr_loss_arr[i][0], tr_loss_arr[i][1], tr_loss_arr[i][2], tr_loss_arr[i][3],
-                       tr_loss_arr[i][4], tr_loss_arr[i][5], tr_loss_arr[i][6], tr_loss_arr[i][7]))
+            print('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tOKappaTr\tVaLoss\t\tVaAcc\t\tVaMCA\t\tOKappaVa')
+            for i in range(len(outputs)):
+                print('%1d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t\t %.3f' %
+                    (i, outputs[i][0], outputs[i][1], outputs[i][2], outputs[i][3], outputs[i][4], outputs[i][5],
+                     outputs[i][6], outputs[i][7]))
+                # if i == (self.args.n_epochs-1):
+                #     print("\nTraining Kappa ----->")
+                #     self.getClassKappa(tr_target, tr_pred, tr_cla)
+                #     print("Validating Kappa ----->")
+                #     self.getClassKappa(va_target, va_pred, va_cla)
+            if epoch == (self.args.n_epochs-1):
+                print("\nTraining Kappa ----->")
+            self.getClassKappa(tr_target, tr_pred, tr_cla, epoch)
+            if epoch == (self.args.n_epochs-1):
+                print("Validating Kappa ----->")
+            self.getClassKappa(va_target, va_pred, va_cla, epoch)
 
         f = open("./results/lastResults.txt", "w+")
-        f.write('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tKappaTr\t\tVaLoss\t\tVaAcc\t\tVaMCA\t\tKappaVa\n')
-        for i in range(len(tr_loss_arr)):
-            f.write('%1d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t %.3f \n' %
-                      (i, tr_loss_arr[i][0], tr_loss_arr[i][1], tr_loss_arr[i][2], tr_loss_arr[i][3],
-                       tr_loss_arr[i][4], tr_loss_arr[i][5], tr_loss_arr[i][6], tr_loss_arr[i][7]))
+        f.write('Epoch\tTrLoss\t\tTrAcc\t\tTrMCA\t\tOKappaTr\tVaLoss\t\tVaAcc\t\tVaMCA\t\tOKappaVa')
+        for i in range(len(outputs)):
+            f.write('%1d \t %.4f \t %.3f%% \t %.3f%% \t %.3f \t\t %.4f \t %.3f%% \t %.3f%% \t\t %.3f' %
+                    (i, outputs[i][0], outputs[i][1], outputs[i][2], outputs[i][3], outputs[i][4], outputs[i][5],
+                     outputs[i][6], outputs[i][7]))
         f.close()
 
         torch.save(self.net, self.args.modelSaveFn)
-        max_valid_kappa = max([_[7] for _ in tr_loss_arr])
+        max_valid_kappa = max([_[7] for _ in outputs])
 
         # Plot Epoch Vs TrLoss
         ep = [i for i in range(self.args.n_epochs)]
-        tl = [i[0] for i in tr_loss_arr]
+        tl = [i[0] for i in outputs]
         plt.figure(0)
         plt.plot(ep, tl)
+        plt.suptitle('Epoch Vs TrLoss')
+        plt.xlabel('Epoch')
+        plt.ylabel('TrLoss')
         plt.savefig('EpochVsTrLoss.png')
 
         # Plot Epoch Vs VaLoss
-        vl = [i[4] for i in tr_loss_arr]
+        vl = [i[4] for i in outputs]
         plt.figure(1)
         plt.plot(ep, vl)
+        plt.suptitle('Epoch Vs VaLoss')
+        plt.xlabel('Epoch')
+        plt.ylabel('VaLoss')
         plt.savefig('EpochVsVaLoss.png')
 
         # Plot Epoch Vs KappaTr and KappaVa
-        tk = [i[3] for i in tr_loss_arr]
-        vk = [i[7] for i in tr_loss_arr]
+        tk = [i[3] for i in outputs]
+        vk = [i[7] for i in outputs]
         plt.figure(2)
         plt.plot(ep, tk)
         plt.plot(ep, vk)
+        plt.suptitle('Epoch Vs Kappa')
+        plt.xlabel('Epoch')
+        plt.ylabel('Kappa')
         plt.legend(['KappaTr', 'KappaVa'], loc='upper left')
         plt.savefig('EpochVsKappa.png')
 
@@ -222,3 +248,72 @@ class cnnTrain(nn.Module):
         mca = mca / len(self.class_weights)
         acc = acc / len(predicted_lbls) * 100
         return acc, mca
+
+    def getBinaryKappa(self, target_lbls, predicted_lbls):
+        target_p, predicted_p, target_n, predicted_n = [], [], [], []
+        for i in range(len(self.class_weights)):
+            for j, x in enumerate(target_lbls):
+                if x == 0:
+                    target_n.append(x)
+                    predicted_n.append(predicted_lbls[j])
+                elif x == 1:
+                    target_p.append(x)
+                    predicted_p.append(predicted_lbls[j])
+
+        kappa_p = cohen_kappa_score(target_p, predicted_p)
+        kappa_n = cohen_kappa_score(target_n, predicted_n)
+        return kappa_p, kappa_n
+
+    def getClassKappa(self, target_lbls, predicted_lbls, class_lbls, epoch):
+        # type = ['SHOULDER', 'HUMERUS', 'FINGER', 'ELBOW', 'WRIST', 'FOREARM', 'HAND']
+        shoulder_tar, shoulder_pre = [], []
+        humerus_tar, humerus_pre = [], []
+        finger_tar, finger_pre = [], []
+        elbow_tar, elbow_pre = [], []
+        wrist_tar, wrist_pre = [], []
+        forearm_tar, forearm_pre = [], []
+        hand_tar, hand_pre = [], []
+
+        shoulder_ka, humerus_ka, finger_ka, elbow_ka, wrist_ka, forearm_ka, hand_ka = [], [], [], [], [], [], []
+
+        for i, x in enumerate(target_lbls):
+            if class_lbls[i] == 'SHOULDER':
+                shoulder_tar.append(x)
+                shoulder_pre.append(predicted_lbls[i])
+            elif class_lbls[i] == 'HUMERUS':
+                humerus_tar.append(x)
+                humerus_pre.append(predicted_lbls[i])
+            elif class_lbls[i] == 'FINGER':
+                finger_tar.append(x)
+                finger_pre.append(predicted_lbls[i])
+            elif class_lbls[i] == 'ELBOW':
+                elbow_tar.append(x)
+                elbow_pre.append(predicted_lbls[i])
+            elif class_lbls[i] == 'WRIST':
+                wrist_tar.append(x)
+                wrist_pre.append(predicted_lbls[i])
+            elif class_lbls[i] == 'FOREARM':
+                forearm_tar.append(x)
+                forearm_pre.append(predicted_lbls[i])
+            elif class_lbls[i] == 'HAND':
+                hand_tar.append(x)
+                hand_pre.append(predicted_lbls[i])
+
+        shoulder_ka.append(cohen_kappa_score(shoulder_tar, shoulder_pre))
+        humerus_ka.append(cohen_kappa_score(humerus_tar, humerus_pre))
+        finger_ka.append(cohen_kappa_score(finger_tar, finger_pre))
+        elbow_ka.append(cohen_kappa_score(elbow_tar, elbow_pre))
+        wrist_ka.append(cohen_kappa_score(wrist_tar, wrist_pre))
+        forearm_ka.append(cohen_kappa_score(forearm_tar, forearm_pre))
+        hand_ka.append(cohen_kappa_score(hand_tar, hand_pre))
+
+        if epoch == (self.args.n_epochs-1):
+            print('Class\t\tKappa')
+            print('SHOULDER:\t%.3f' % max(shoulder_ka))
+            print('HUMERUS: \t%.3f' % max(humerus_ka))
+            print('FINGER:\t\t%.3f' % max(finger_ka))
+            print('ELBOW: \t\t%.3f' % max(elbow_ka))
+            print('WRIST: \t\t%.3f' % max(wrist_ka))
+            print('FOREARM: \t%.3f' % max(forearm_ka))
+            print('HAND:\t\t%.3f' % max(hand_ka))
+            print('------------------------------------------------')
